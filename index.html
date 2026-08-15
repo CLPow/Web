@@ -370,6 +370,7 @@ footer{
     <p class="help">This creates the room and gives you <b>one link</b>. Send that link to the group chat — everyone opens it and taps <b>only their own slot</b>. The link always shows the same result, so nobody can re-roll their way out of a bad theme.</p>
     <div class="rollbar">
       <button class="btn primary" id="rollBtn">🎲 CREATE ROOM &amp; ROLL</button>
+      <button class="btn ghost sm" id="clearBtn">↺ Clear form</button>
       <span class="err" id="err"></span>
     </div>
   </div>
@@ -841,19 +842,17 @@ function renderSlots(){
     inp.maxLength = 24;
     inp.placeholder = "Passenger " + (i + 1);
     inp.value = slotNames[i] || "";
-    inp.addEventListener("input", () => { slotNames[i] = inp.value; save(); });
+    inp.addEventListener("input", () => { slotNames[i] = inp.value; });
     d.appendChild(inp);
     $("slots").appendChild(d);
   }
   ticker(room.trim() ? room.trim().toUpperCase() : "—— NOT CREATED", "AWAITING SETUP", pax);
-  save();
 }
 $("minus").onclick = () => { if(pax > MINPAX){ pax--; renderSlots(); } };
 $("plus").onclick  = () => { if(pax < MAXPAX){ pax++; renderSlots(); } };
 $("roomIn").addEventListener("input", e => {
   room = e.target.value;
   ticker(room.trim() ? room.trim().toUpperCase() : "—— NOT CREATED", "AWAITING SETUP", pax);
-  save();
 });
 
 /* ---------- categories ---------- */
@@ -871,14 +870,12 @@ $("cats").addEventListener("click", e => {
   const i = cats.indexOf(id);
   if(i > -1) cats.splice(i, 1); else cats.push(id);
   renderCats();
-  save();
 });
 document.querySelectorAll(".opt").forEach(el => {
   el.addEventListener("click", () => {
     const k = el.dataset.opt;
     opts[k] = !opts[k];
     el.classList.toggle("on", opts[k]);
-    save();
   });
 });
 function syncOpts(){
@@ -891,22 +888,23 @@ function syncOpts(){
    fully deterministic, so reopening the same link always rebuilds the same
    assignments — no server, no expiry. localStorage only remembers which slot
    THIS device claimed, so returning to the link jumps straight to your own pass. */
-function save(){
-  try{
-    localStorage.setItem("ootd.setup",
-      JSON.stringify({ room, pax, slotNames, cats, opts }));
-  }catch(e){}
+/* The setup form is deliberately NOT persisted. This is a public page, so every visit
+   starts blank — no names left sitting in the form on a shared or borrowed computer.
+   Older versions did save it, so wipe anything they left behind. */
+function purgeLegacySetup(){
+  try{ localStorage.removeItem("ootd.setup"); }catch(e){}
 }
-function load(){
-  try{
-    const d = JSON.parse(localStorage.getItem("ootd.setup") || "null");
-    if(!d) return;
-    if(typeof d.room === "string") room = d.room;
-    if(typeof d.pax === "number") pax = Math.min(MAXPAX, Math.max(MINPAX, d.pax));
-    if(Array.isArray(d.slotNames)) slotNames = d.slotNames;
-    if(Array.isArray(d.cats) && d.cats.length) cats = d.cats;
-    if(d.opts) opts = Object.assign(opts, d.opts);
-  }catch(e){}
+
+/* Reset the form to a clean, empty room. */
+function resetSetup(){
+  room = "";
+  pax = 4;
+  slotNames = ["", "", "", ""];
+  cats = CATS.map(c => c.id);
+  opts = { unique:true, gifts:true, hints:false };
+  $("roomIn").value = "";
+  $("err").textContent = "";
+  renderSlots(); renderCats(); syncOpts();
 }
 function claimKey(cfg){ return "ootd.me." + cfg.seed; }
 function getClaim(cfg){
@@ -969,6 +967,8 @@ $("editBtn").onclick = () => {
   renderSlots(); renderCats(); syncOpts();
   show("setup");
 };
+$("clearBtn").onclick = () => { resetSetup(); toast("Form cleared"); };
+
 $("printBtn").onclick = () => {
   renderAll();
   $("advBox").open = true;
@@ -1125,8 +1125,8 @@ function routeHash(h){
   return false;
 }
 function boot(){
-  load();
-  $("roomIn").value = room;
+  purgeLegacySetup();
+  $("roomIn").value = "";
   renderSlots();
   renderCats();
   syncOpts();
